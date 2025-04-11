@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include <QtConcurrent/QtConcurrent>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
@@ -7,23 +8,25 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     mytextoutput1 = ui->textEdit;
     mytextoutput2 = ui->textEdit_2;
+    mytextoutputforthreads = ui->textEdit_3;
+    mytextoutputforthreads2 = ui->textEdit_4;
 
     mytextoutput1->setReadOnly(true);
     mytextoutput2->setReadOnly(true);
+    mytextoutputforthreads->setReadOnly(true);
+
     myprocess = new QProcess(this);
 
     connect(myprocess, &QProcess::readyReadStandardOutput, [=]()
             { mytextoutput1->append(myprocess->readAllStandardOutput()); });
 
     connect(myprocess, &QProcess::errorOccurred, [=]()
-            { mytextoutput2->append("process error occured"); });
-
+            { mytextoutput2->append(myprocess->errorString()); });
 
     connect(myprocess, &QProcess::finished, [=](int exitcode, QProcess::ExitStatus exitstatus)
             {
                 mytextoutput2->append("Process finished with exit code: " + QString::number(exitcode));
-                mytextoutput2->append("Exit status: " + QString(exitstatus == QProcess::NormalExit ? "Normal Exit" : "Crash Exit"));
-            });
+                mytextoutput2->append("Exit status: " + QString(exitstatus == QProcess::NormalExit ? "Normal Exit" : "Crash Exit")); });
 }
 
 MainWindow::~MainWindow()
@@ -72,4 +75,70 @@ void MainWindow::on_pushButton_3_clicked()
         // qDebug() << "Process terminated.";
         mytextoutput2->append("Process terminated.");
     }
+
+    stopThreadExecution();
 }
+
+
+void MainWindow::myfunc()
+{
+    stopThread = false;
+    currentFuture = QtConcurrent::run([this]() {
+        for (int i = 0; i < 10 && !stopThread; i++) {
+            QMetaObject::invokeMethod(mytextoutputforthreads, [this,i]() {
+                mytextoutputforthreads->append(QString::number(i));
+            }, Qt::QueuedConnection);
+            QThread::msleep(1000);
+        }
+        
+        // Optional completion notification
+        QMetaObject::invokeMethod(this, [this]() {
+            if (stopThread) {
+                mytextoutputforthreads->append("Thread stopped");
+            } else {
+                mytextoutputforthreads->append("Task completed");
+            }
+        }, Qt::QueuedConnection);
+    });
+}
+
+void MainWindow::myfunc2()
+{
+    stopThread = false;
+    currentFuture = QtConcurrent::run([this]() {
+        for (int i = 0; i < 10 && !stopThread; i++) {
+            QMetaObject::invokeMethod(mytextoutputforthreads2, [this,i]() {
+                mytextoutputforthreads2->append(QString::number(i));
+            }, Qt::QueuedConnection);
+            QThread::msleep(1000);
+        }
+        
+        // Optional completion notification
+        QMetaObject::invokeMethod(this, [this]() {
+            if (stopThread) {
+                mytextoutputforthreads2->append("Thread stopped");
+            } else {
+                mytextoutputforthreads2->append("Task completed");
+            }
+        }, Qt::QueuedConnection);
+    });
+}
+
+void MainWindow::stopThreadExecution()
+{
+    stopThread = true;
+    if (currentFuture.isRunning()) {
+        currentFuture.waitForFinished();
+    }
+}
+
+void MainWindow::on_pushButton_4_clicked()
+{
+    myfunc(); // This won't block the GUI
+}
+
+void MainWindow::on_pushButton_5_clicked()
+{
+    myfunc2();
+}
+
